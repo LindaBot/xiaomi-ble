@@ -98,6 +98,9 @@ OBJECTS_DEVICE_TYPE = {
     "0x560e",
 }
 
+# Yeelight MBULB3 advertises as a Xiaomi FE95 packet without object payload.
+MBULB3_DEVICE_ID = 0x06EB
+
 
 # Advertisement conversion of measurement data
 # https://iot.mi.com/new/doc/accesses/direct-access/embedded-development/ble/object-definition
@@ -2017,6 +2020,23 @@ class XiaomiBluetoothDeviceData(BluetoothData):
 
         return True
 
+    def _parse_mbulb3_payload(
+        self, data: bytes, offset: int, frctrl_version: int
+    ) -> bool:
+        """Parse the minimal MBULB3 FE95 advertisement without an object payload."""
+        payload = data[offset:]
+        if len(payload) < 1:
+            return False
+
+        self.set_device_sw_version(
+            "Xiaomi (MiBeacon V" + str(frctrl_version) + ")"
+        )
+        self.update_predefined_binary_sensor(
+            BinarySensorDeviceClass.POWER, bool(payload[0])
+        )
+        self.pending = False
+        return True
+
     def _parse_xiaomi(
         self, service_info: BluetoothServiceInfo, name: str, data: bytes
     ) -> bool:
@@ -2044,8 +2064,11 @@ class XiaomiBluetoothDeviceData(BluetoothData):
         frctrl_is_encrypted = (frctrl >> 3) & 1  # check for encryption being used
         frctrl_request_timing = frctrl & 1  # old version
 
+        # Determine the device ID early so we can apply the MBULB3 exception.
+        device_id = data[2] + (data[3] << 8)
+
         # Check that device is not of mesh type
-        if frctrl_mesh != 0:
+        if frctrl_mesh != 0 and device_id != MBULB3_DEVICE_ID:
             _LOGGER.debug(
                 "Device is a mesh type device, which is not supported. Data: %s",
                 data.hex(),
@@ -2068,7 +2091,7 @@ class XiaomiBluetoothDeviceData(BluetoothData):
                 return False
             xiaomi_mac_reversed = data[5:11]
             xiaomi_mac = xiaomi_mac_reversed[::-1]
-            if xiaomi_mac != source_mac:
+            if xiaomi_mac != source_mac and device_id != MBULB3_DEVICE_ID:
                 _LOGGER.debug(
                     "MAC address doesn't match data frame. Expected: %s, Got: %s",
                     to_mac(xiaomi_mac),
@@ -2079,7 +2102,6 @@ class XiaomiBluetoothDeviceData(BluetoothData):
             xiaomi_mac = source_mac
 
         # determine the device type
-        device_id = data[2] + (data[3] << 8)
         try:
             device = DEVICE_TYPES[device_id]
         except KeyError:
@@ -2148,7 +2170,11 @@ class XiaomiBluetoothDeviceData(BluetoothData):
 
         # check that data contains object
         if frctrl_object_include == 0:
-            # data does not contain Object
+            if device_id == MBULB3_DEVICE_ID and self._parse_mbulb3_payload(
+                data, i, frctrl_version
+            ):
+                return True
+
             _LOGGER.debug("Advertisement doesn't contain payload, adv: %s", data.hex())
             return False
 

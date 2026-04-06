@@ -201,6 +201,56 @@ def test_blank_advertisements_then_unencrypted_last_service_info():
     assert device.last_service_info == advertisement
 
 
+def test_yeelight_mbulb3_power_state_from_minimal_advertisement():
+    """Test that MBULB3 on/off state can be parsed from a minimal Xiaomi FE95 advertisement."""
+    device = XiaomiBluetoothDeviceData()
+    advertisement = bytes_to_service_info(
+        bytes.fromhex("b054eb0600009b79544ae8080e00"),
+        address="E8:4A:54:79:9B:00",
+    )
+
+    assert device.supported(advertisement)
+    assert device.update(advertisement) == SensorUpdate(
+        title="Lightbulb 9B00 (MBULB3)",
+        devices={
+            None: SensorDeviceInfo(
+                name="Lightbulb 9B00",
+                manufacturer="Yeelight",
+                model="MBULB3",
+                hw_version=None,
+                sw_version="Xiaomi (MiBeacon V5)",
+            )
+        },
+        entity_descriptions={
+            KEY_SIGNAL_STRENGTH: SensorDescription(
+                device_key=KEY_SIGNAL_STRENGTH,
+                device_class=DeviceClass.SIGNAL_STRENGTH,
+                native_unit_of_measurement="dBm",
+            ),
+        },
+        entity_values={
+            KEY_SIGNAL_STRENGTH: SensorValue(
+                name="Signal Strength",
+                device_key=KEY_SIGNAL_STRENGTH,
+                native_value=-60,
+            ),
+        },
+        binary_entity_descriptions={
+            KEY_POWER: BinarySensorDescription(
+                device_key=KEY_POWER,
+                device_class=BinarySensorDeviceClass.POWER,
+            ),
+        },
+        binary_entity_values={
+            KEY_POWER: BinarySensorValue(
+                name="Power",
+                device_key=KEY_POWER,
+                native_value=True,
+            ),
+        },
+    )
+
+
 def test_encryption_needs_v2():
     """Test that we can detect what kind of encryption key a device needs."""
     data_string = b"X0\xb6\x03\xd2\x8b\x98\xc5A$\xf8\xc3I\x14vu~\x00\x00\x00\x99"
